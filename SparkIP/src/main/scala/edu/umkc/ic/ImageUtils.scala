@@ -2,7 +2,7 @@ package edu.umkc.ic
 
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Matrix, Vector}
 import org.bytedeco.javacpp.opencv_core._
-import org.bytedeco.javacpp.opencv_features2d.KeyPoint
+import org.bytedeco.javacpp.opencv_features2d.{BOWImgDescriptorExtractor, DescriptorExtractor, FlannBasedMatcher, KeyPoint}
 import org.bytedeco.javacpp.opencv_highgui._
 import org.bytedeco.javacpp.opencv_nonfree.{SIFT, SURF}
 
@@ -33,6 +33,32 @@ object ImageUtils {
     //    println(s"No of Keypoints ${keypoints_1.size()}")
     println(s"Key Descriptors ${descriptors.rows()} x ${descriptors.cols()}")
     descriptors
+  }
+
+  def bowDescriptors(file: String, dictionary: Mat): Mat = {
+    val matcher = new FlannBasedMatcher()
+    val detector = new SIFT()
+    val extractor = DescriptorExtractor.create("SIFT")
+    val bowDE = new BOWImgDescriptorExtractor(extractor, matcher)
+    bowDE.setVocabulary(dictionary)
+    println(bowDE.descriptorSize()+" "+bowDE.descriptorType())
+
+    val img = imread(file, CV_LOAD_IMAGE_GRAYSCALE)
+    if (img.empty()) {
+      println("Image is empty")
+      -1
+    }
+
+    val keypoints = new KeyPoint
+
+    detector.detect(img, keypoints)
+
+    val response_histogram = new Mat
+    bowDE.compute(img, keypoints, response_histogram)
+
+    println("Histogram size : "+response_histogram.size().asCvSize().toString)
+    println("Histogram : "+response_histogram.asCvMat().toString)
+    response_histogram
   }
 
   def matToVectors(mat: Mat): Array[Vector] = {
@@ -118,5 +144,5 @@ object ImageUtils {
 
     vocab
   }
-  
+
 }

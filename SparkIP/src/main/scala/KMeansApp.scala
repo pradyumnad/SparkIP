@@ -37,9 +37,9 @@ object KMeansApp {
     val sameModel = KMeansModel.load(sc, "myModelPath")
 
     println(s"No of clusters : ${sameModel.k}")
-    println(sameModel.clusterCenters.mkString(" "))
 
     val centers = ImageUtils.vectorsToMat(sameModel.clusterCenters)
+    println(centers.asCvMat().toString)
 
     val res = sameModel.predict(Vectors.dense(2, 3.5, 1.5, 1.0))
     println(s"Prediction : $res")

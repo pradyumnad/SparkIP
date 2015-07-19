@@ -4,92 +4,37 @@ package edu.umkc.ic
  * Created by pradyumnad on 10/07/15.
  */
 
-import org.apache.spark.mllib.clustering.KMeans
-import org.apache.spark.mllib.linalg.{Vector}
+import java.nio.file.{Paths, Files}
+
+import org.apache.spark.mllib.clustering.{KMeansModel, KMeans}
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 import org.bytedeco.javacpp.opencv_core._
 import org.bytedeco.javacpp.opencv_features2d._
 import org.bytedeco.javacpp.opencv_highgui._
-import org.bytedeco.javacpp.opencv_nonfree.{SURF}
+import org.bytedeco.javacpp.opencv_nonfree.SURF
 
 import scala.collection.mutable
 
 object IPApp {
-  val INPUT_DIR = "files/Train"
-
-  val detector = new SURF
-
-  val mask = new Mat
   val featureVectorsCluster = new mutable.MutableList[String]
 
-  def surfDescriptors(fileName: String): Mat = {
-    println(fileName)
-    val img = imread(fileName)
+  /**
+   *
+   * @param sc : SparkContext
+   * @param images : Images list from the training set
+   */
+  def extractDescriptors(sc: SparkContext, images: RDD[(String, String)]): Unit = {
 
-    if (img.empty()) {
-      println("Image is empty")
+    if (Files.exists(Paths.get(IPSettings.FEATURES_PATH))) {
+      println(s"${IPSettings.FEATURES_PATH} exists, skipping feature extraction..")
+      return
     }
-    //-- Step 1: Detect the keypoints using ORB
-
-    val keypoints = new KeyPoint
-    val descriptors = new Mat
-
-    detector.detectAndCompute(img, mask, keypoints, descriptors)
-
-    println(s"Key Descriptors ${descriptors.rows()} x ${descriptors.cols()} ${descriptors.channels()}")
-
-    descriptors
-  }
-
-  def bowDescriptors(fileName: String): Mat = {
-    println(fileName)
-    val img = imread(fileName)
-
-    if (img.empty()) {
-      println("Image is empty")
-    }
-    //-- Step 1: Detect the keypoints using ORB
-
-    val extractor = new OpponentColorDescriptorExtractor
-    val matcher = new BFMatcher
-
-    val detector = new BOWImgDescriptorExtractor(extractor, matcher)
-
-    val keypoints = new KeyPoint
-    val descriptors = new Mat
-
-    detector.compute(img, keypoints, descriptors)
-
-    println(s"Key Descriptors ${descriptors.rows()} x ${descriptors.cols()} ${descriptors.channels()}")
-
-    descriptors
-  }
-
-  def classify(sc: SparkContext): Unit = {
-
-    val parsedData = sc.objectFile[Vector]("features2")
-
-    // Cluster the data into two classes using KMeans
-    val numClusters = 2
-    val numIterations = 20
-    val clusters = KMeans.train(parsedData, numClusters, numIterations)
-
-    // Evaluate clustering by computing Within Set Sum of Squared Errors
-    val WSSSE = clusters.computeCost(parsedData)
-    println("Within Set Sum of Squared Errors = " + WSSSE)
-
-    clusters.save(sc, "features_cluster")
-  }
-
-  def init(sc: SparkContext): Unit = {
-    val images = sc.wholeTextFiles(s"$INPUT_DIR/*/*.jpg")
-    images.map(println)
 
     val data = images.map {
       case (name, contents) => {
-        val desc = surfDescriptors(name.split(":")(1))
-        //        unClusteredFeatures.push_back(desc) //Storing all the features form the Training set.
-
+        val desc = ImageUtils.descriptors(name.split(":")(1))
         val list = ImageUtils.matToString(desc)
         println("-- " + list.size)
         list
@@ -98,10 +43,60 @@ object IPApp {
 
     val featuresSeq = sc.parallelize(data)
 
-    featuresSeq.saveAsTextFile("bowfeatures")
+    featuresSeq.saveAsTextFile(IPSettings.FEATURES_PATH)
     println("Total size : " + data.size)
-    //    println("Total features : " + unClusteredFeatures.rows())
-    //    println(data.take(2).toList)
+  }
+
+  def kMeansCluster(sc: SparkContext): Unit = {
+    if (Files.exists(Paths.get(IPSettings.KMEANS_PATH))) {
+      println(s"${IPSettings.KMEANS_PATH} exists, skipping clusters formation..")
+      return
+    }
+
+    // Load and parse the data
+    val data = sc.textFile(IPSettings.FEATURES_PATH)
+    val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble))).cache()
+
+    // Cluster the data into two classes using KMeans
+    val numClusters = 100
+    val numIterations = 15
+    val clusters = KMeans.train(parsedData, numClusters, numIterations)
+
+    // Evaluate clustering by computing Within Set Sum of Squared Errors
+    val WSSSE = clusters.computeCost(parsedData)
+    println("Within Set Sum of Squared Errors = " + WSSSE)
+
+    clusters.save(sc, IPSettings.KMEANS_PATH)
+    println(s"Saves Clusters to ${IPSettings.KMEANS_PATH}")
+  }
+
+
+  def createHistogram(sc: SparkContext, images: RDD[(String, String)]): Unit = {
+    if (Files.exists(Paths.get(IPSettings.HISTOGRAM_PATH))) {
+      println(s"${IPSettings.HISTOGRAM_PATH} exists, skipping clusters formation..")
+      return
+    }
+
+    val sameModel = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
+
+    val kMeansCenters = sc.broadcast(sameModel.clusterCenters)
+
+    val data = images.map {
+      case (name, contents) => {
+
+        val vocabulary = ImageUtils.vectorsToMat(kMeansCenters.value)
+
+        val desc = ImageUtils.bowDescriptors(name.split(":")(1), vocabulary)
+        val list = ImageUtils.matToString(desc)
+        println("-- " + list.size)
+        list
+      }
+    }.reduce((x, y) => x ::: y)
+
+    val featuresSeq = sc.parallelize(data)
+
+    featuresSeq.saveAsTextFile(IPSettings.HISTOGRAM_PATH)
+    println("Total size : " + data.size)
   }
 
   def main(args: Array[String]) {
@@ -111,10 +106,29 @@ object IPApp {
       .set("spark.executor.memory", "2g")
     val sc = new SparkContext(conf)
 
-    init(sc)
+    val images = sc.wholeTextFiles(s"${IPSettings.INPUT_DIR}/*/*.jpg").cache()
 
-    //    classify(sc)
+    /**
+     * Extracts Key Descriptors from the Training set
+     * Saves it to a text file
+     */
+    extractDescriptors(sc, images)
+
+    /**
+     * Reads the Key descriptors and forms a 'K' cluster
+     * Saves the centers as a text file
+     */
+    kMeansCluster(sc)
+
+    /**
+     * Forms a labeled Histogram using the Training set
+     * Saves it in the form of label, [Histogram]
+     *
+     * This shall be used as a input to Naive Bayes to create a model
+     */
+    createHistogram(sc, images)
 
     sc.stop()
   }
+
 }
