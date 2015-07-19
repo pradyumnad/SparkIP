@@ -22,7 +22,7 @@ import scala.collection.mutable
 object IPApp {
   val featureVectorsCluster = new mutable.MutableList[String]
 
-  val IMAGE_CATEGORIES = List("airplanes","ant")
+  val IMAGE_CATEGORIES = List("accordion", "airplanes", "ant")
 
   /**
    *
@@ -62,7 +62,7 @@ object IPApp {
     val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble))).cache()
 
     // Cluster the data into two classes using KMeans
-    val numClusters = 200
+    val numClusters = 400
     val numIterations = 20
     val clusters = KMeans.train(parsedData, numClusters, numIterations)
 
@@ -98,8 +98,8 @@ object IPApp {
         println("-- " + list.size)
 
         val segments = name.split("/")
-        val cat = segments(segments.length-2)
-        List(categories.value.indexOf(cat)+","+list(0))
+        val cat = segments(segments.length - 2)
+        List(categories.value.indexOf(cat) + "," + list(0))
       }
     }.reduce((x, y) => x ::: y)
 
@@ -109,7 +109,7 @@ object IPApp {
     println("Total size : " + data.size)
   }
 
-  def generateNaiveBayesModel(sc: SparkContext) : Unit = {
+  def generateNaiveBayesModel(sc: SparkContext): Unit = {
     if (Files.exists(Paths.get(IPSettings.NAIVE_BAYES_PATH))) {
       println(s"${IPSettings.NAIVE_BAYES_PATH} exists, skipping Naive Bayes model formation..")
       return
@@ -141,7 +141,7 @@ object IPApp {
     val model = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
     val vocabulary = ImageUtils.vectorsToMat(model.clusterCenters)
 
-    val path = "files/101_ObjectCategories/ant/image_0042.jpg"
+    val path = "files/101_ObjectCategories/ant/image_0012.jpg"
     val desc = ImageUtils.bowDescriptors(path, vocabulary)
 
     val testImageMat = imread(path)
@@ -149,14 +149,14 @@ object IPApp {
 
     val histogram = ImageUtils.matToVector(desc)
 
-    println("-- Histogram size : "+histogram.size)
+    println("-- Histogram size : " + histogram.size)
     println(histogram.toArray.mkString(" "))
 
     val nbModel = NaiveBayesModel.load(sc, IPSettings.NAIVE_BAYES_PATH)
     println(nbModel.labels.mkString(" "))
 
     val p = nbModel.predict(histogram)
-    println(s"Predicting test image : "+ IMAGE_CATEGORIES(p.toInt))
+    println(s"Predicting test image : " + IMAGE_CATEGORIES(p.toInt))
 
     waitKey(0)
   }
