@@ -2,53 +2,81 @@
  * Created by pradyumnad on 10/07/15.
  */
 
+import edu.umkc.ic.ImageUtils
 import org.bytedeco.javacpp.opencv_core._
 import org.bytedeco.javacpp.opencv_features2d._
 import org.bytedeco.javacpp.opencv_highgui._
-import org.bytedeco.javacpp.opencv_contrib._
-import org.bytedeco.javacpp.opencv_imgproc._
-import org.bytedeco.javacpp.opencv_nonfree.SURF
+import org.bytedeco.javacpp.opencv_nonfree.{SIFT, SURF}
 
 object OpenCVApp {
 
+  var vocabulary = new Mat()
+
   def train(): Unit = {
+    println("== TRAIN ==")
+    val files = List(
+      "files/Train/airplanes/image_0001.jpg",
+      "files/Train/airplanes/image_0002.jpg",
+      "files/Train/ant/image_0001.jpg",
+      "files/Train/ant/image_0002.jpg"
+    )
+
+    val training_descriptors = new Mat
+
+    for (file <- files) {
+      val desc = ImageUtils.descriptors(file)
+      training_descriptors.push_back(desc)
+    }
+
+    println("Unclustered Features "+training_descriptors.size().asCvSize().toString)
+    //Construct BOWKMeansTrainer
+    //the number of bags
+    val dictionarySize = 100
+    //define Term Criteria
+    val bowTrainer = new BOWKMeansTrainer(dictionarySize)
+    bowTrainer.add(training_descriptors)
+    vocabulary = bowTrainer.cluster()
+
+    println("Vocab size : "+vocabulary.size().asCvSize().toString)
 
   }
 
-  def main(args: Array[String]) {
-    val img_1 = imread("/Users/pradyumnad/KDM/SparkIP/files/101_ObjectCategories/airplanes/image_0010.jpg", CV_LOAD_IMAGE_GRAYSCALE)
-    if (img_1.empty()) {
+  def test(): Unit = {
+    println("== TEST ==")
+    val test_image = "files/101_ObjectCategories/ant/image_0004.jpg"
+
+    val dictionary = vocabulary
+
+    val matcher = new FlannBasedMatcher()
+    val detector = new SIFT()
+    val extractor = DescriptorExtractor.create("SIFT")
+    val bowDE = new BOWImgDescriptorExtractor(extractor, matcher)
+    bowDE.setVocabulary(dictionary)
+    println(bowDE.descriptorSize()+" "+bowDE.descriptorType())
+
+    val img = imread(test_image, CV_LOAD_IMAGE_GRAYSCALE)
+    if (img.empty()) {
       println("Image is empty")
       -1
     }
 
-    //-- Step 1: Detect the keypoints using ORB
-    val detector = new SURF
-    val keypoints_1 = new KeyPoint
+    val keypoints = new KeyPoint
 
-    val mask = new Mat
-    val descriptors_1 = new Mat
+    detector.detect(img, keypoints)
 
-    detector.detectAndCompute(img_1, mask, keypoints_1, descriptors_1)
+    val response_histogram = new Mat
+    bowDE.compute(img, keypoints, response_histogram)
 
-//    println(s"No of Keypoints ${keypoints_1.size()}")
-    println(s"Key Descriptors ${descriptors_1.rows()} x ${descriptors_1.cols()}")
+    println("Histogram size : "+response_histogram.size().asCvSize().toString)
+    println("Histogram : "+response_histogram.asCvMat().toString)
+  }
 
-    val img_out = new Mat
-    drawKeypoints(img_1, keypoints_1, img_out)
+  def main(args: Array[String]) {
 
-    imshow("Keypoints", img_out)
+    train()
 
-    //Making something up with BOW :P
-    val bowTrainer = new BOWKMeansTrainer(100)
-    bowTrainer.add(descriptors_1)
+    test()
 
-    val vocabulary = bowTrainer.cluster()
-
-    println(vocabulary.asCvMat().toString)
-    println(s"BOW Descriptors ${vocabulary.rows()} x ${vocabulary.cols()}")
-
-    waitKey(0)
   }
 
   def matcher(): Unit = {

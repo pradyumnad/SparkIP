@@ -5,41 +5,64 @@ package edu.umkc.ic
  */
 
 import org.apache.spark.mllib.clustering.KMeans
-import org.apache.spark.mllib.linalg.{Vectors, Matrices, Matrix, Vector}
+import org.apache.spark.mllib.linalg.{Vector}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.bytedeco.javacpp.opencv_core._
 import org.bytedeco.javacpp.opencv_features2d._
 import org.bytedeco.javacpp.opencv_highgui._
-import org.bytedeco.javacpp.opencv_nonfree.{SURF, SIFT}
+import org.bytedeco.javacpp.opencv_nonfree.{SURF}
 
 import scala.collection.mutable
 
 object IPApp {
-//  val unClusteredFeatures = new Mat
   val INPUT_DIR = "files/Train"
 
   val detector = new SURF
+
   val mask = new Mat
   val featureVectorsCluster = new mutable.MutableList[String]
 
-  def train(fileName: String): Mat = {
+  def surfDescriptors(fileName: String): Mat = {
     println(fileName)
     val img = imread(fileName)
 
     if (img.empty()) {
       println("Image is empty")
-      //      return Matrices.ones(1, 1)
     }
     //-- Step 1: Detect the keypoints using ORB
 
-    val keypoints_1 = new KeyPoint
-    val descriptors_1 = new Mat
+    val keypoints = new KeyPoint
+    val descriptors = new Mat
 
-    detector.detectAndCompute(img, mask, keypoints_1, descriptors_1)
+    detector.detectAndCompute(img, mask, keypoints, descriptors)
 
-    println(s"Key Descriptors ${descriptors_1.rows()} x ${descriptors_1.cols()} ${descriptors_1.channels()}")
+    println(s"Key Descriptors ${descriptors.rows()} x ${descriptors.cols()} ${descriptors.channels()}")
 
-    descriptors_1
+    descriptors
+  }
+
+  def bowDescriptors(fileName: String): Mat = {
+    println(fileName)
+    val img = imread(fileName)
+
+    if (img.empty()) {
+      println("Image is empty")
+    }
+    //-- Step 1: Detect the keypoints using ORB
+
+    val extractor = new OpponentColorDescriptorExtractor
+    val matcher = new BFMatcher
+
+    val detector = new BOWImgDescriptorExtractor(extractor, matcher)
+
+    val keypoints = new KeyPoint
+    val descriptors = new Mat
+
+    detector.compute(img, keypoints, descriptors)
+
+    println(s"Key Descriptors ${descriptors.rows()} x ${descriptors.cols()} ${descriptors.channels()}")
+
+    descriptors
   }
 
   def classify(sc: SparkContext): Unit = {
@@ -64,20 +87,20 @@ object IPApp {
 
     val data = images.map {
       case (name, contents) => {
-        val desc = train(name.split(":")(1))
-//        unClusteredFeatures.push_back(desc) //Storing all the features form the Training set.
+        val desc = surfDescriptors(name.split(":")(1))
+        //        unClusteredFeatures.push_back(desc) //Storing all the features form the Training set.
 
         val list = ImageUtils.matToString(desc)
-        println("-- "+list.size)
+        println("-- " + list.size)
         list
       }
-    }.reduce((x, y) => x:::y)
+    }.reduce((x, y) => x ::: y)
 
     val featuresSeq = sc.parallelize(data)
 
-    featuresSeq.saveAsTextFile("features2")
-    println("Total size : "+data.size)
-//    println("Total features : " + unClusteredFeatures.rows())
+    featuresSeq.saveAsTextFile("bowfeatures")
+    println("Total size : " + data.size)
+    //    println("Total features : " + unClusteredFeatures.rows())
     //    println(data.take(2).toList)
   }
 
