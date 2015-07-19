@@ -1,5 +1,6 @@
 import java.nio.file.{Paths, Files}
 
+import edu.umkc.ic.ImageUtils
 import org.apache.spark.mllib.clustering.{KMeansModel, KMeans}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.{SparkContext, SparkConf}
@@ -10,7 +11,7 @@ import org.apache.spark.{SparkContext, SparkConf}
 object KMeansApp {
   def train(sc: SparkContext): Unit = {
     // Load and parse the data
-    val data = sc.textFile("features2")
+    val data = sc.textFile("files/kmeans_data.txt")
     val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble))).cache()
 
     // Cluster the data into two classes using KMeans
@@ -37,6 +38,9 @@ object KMeansApp {
 
     println(s"No of clusters : ${sameModel.k}")
     println(sameModel.clusterCenters.mkString(" "))
+
+    val centers = ImageUtils.vectorsToMat(sameModel.clusterCenters)
+
     val res = sameModel.predict(Vectors.dense(2, 3.5, 1.5, 1.0))
     println(s"Prediction : $res")
   }
