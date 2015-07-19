@@ -22,6 +22,8 @@ import scala.collection.mutable
 object IPApp {
   val featureVectorsCluster = new mutable.MutableList[String]
 
+  val IMAGE_CATEGORIES = List("airplanes","ant")
+
   /**
    *
    * @param sc : SparkContext
@@ -60,8 +62,8 @@ object IPApp {
     val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble))).cache()
 
     // Cluster the data into two classes using KMeans
-    val numClusters = 100
-    val numIterations = 15
+    val numClusters = 200
+    val numIterations = 20
     val clusters = KMeans.train(parsedData, numClusters, numIterations)
 
     // Evaluate clustering by computing Within Set Sum of Squared Errors
@@ -83,7 +85,7 @@ object IPApp {
 
     val kMeansCenters = sc.broadcast(sameModel.clusterCenters)
 
-    val categories = sc.broadcast(List("airplanes","ant"))
+    val categories = sc.broadcast(IMAGE_CATEGORIES)
 
 
     val data = images.map {
@@ -134,6 +136,31 @@ object IPApp {
     println("Naive Bayes Model generated")
   }
 
+  def testImageClassification(sc: SparkContext) = {
+
+    val model = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
+    val vocabulary = ImageUtils.vectorsToMat(model.clusterCenters)
+
+    val path = "files/101_ObjectCategories/ant/image_0042.jpg"
+    val desc = ImageUtils.bowDescriptors(path, vocabulary)
+
+    val testImageMat = imread(path)
+    imshow("Test Image", testImageMat)
+
+    val histogram = ImageUtils.matToVector(desc)
+
+    println("-- Histogram size : "+histogram.size)
+    println(histogram.toArray.mkString(" "))
+
+    val nbModel = NaiveBayesModel.load(sc, IPSettings.NAIVE_BAYES_PATH)
+    println(nbModel.labels.mkString(" "))
+
+    val p = nbModel.predict(histogram)
+    println(s"Predicting test image : "+ IMAGE_CATEGORIES(p.toInt))
+
+    waitKey(0)
+  }
+
   def main(args: Array[String]) {
     val conf = new SparkConf()
       .setAppName(s"IPApp")
@@ -163,10 +190,13 @@ object IPApp {
      */
     createHistogram(sc, images)
 
+    /**
+     * From the labeled Histograms a Naive Bayes Model is created
+     */
     generateNaiveBayesModel(sc)
 
-    val nbModel = NaiveBayesModel.load(sc, IPSettings.NAIVE_BAYES_PATH)
-    println(nbModel.labels.mkString(" "))
+
+    testImageClassification(sc)
 
     sc.stop()
   }

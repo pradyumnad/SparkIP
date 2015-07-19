@@ -41,7 +41,7 @@ object ImageUtils {
     val extractor = DescriptorExtractor.create("SIFT")
     val bowDE = new BOWImgDescriptorExtractor(extractor, matcher)
     bowDE.setVocabulary(dictionary)
-    println(bowDE.descriptorSize()+" "+bowDE.descriptorType())
+    println(bowDE.descriptorSize() + " " + bowDE.descriptorType())
 
     val img = imread(file, CV_LOAD_IMAGE_GRAYSCALE)
     if (img.empty()) {
@@ -56,9 +56,25 @@ object ImageUtils {
     val response_histogram = new Mat
     bowDE.compute(img, keypoints, response_histogram)
 
-    println("Histogram size : "+response_histogram.size().asCvSize().toString)
-    println("Histogram : "+response_histogram.asCvMat().toString)
+    println("Histogram size : " + response_histogram.size().asCvSize().toString)
+    println("Histogram : " + response_histogram.asCvMat().toString)
     response_histogram
+  }
+
+  def matToVector(mat: Mat): Vector = {
+    val imageCvmat = mat.asCvMat()
+
+    val noOfCols = imageCvmat.cols()
+
+    //Channels discarded, take care of this when you are using multiple channels
+
+    val imageInDouble = new Array[Double](noOfCols)
+    for (col <- 0 to noOfCols - 1) {
+      val pixel = imageCvmat.get(0, col)
+      imageInDouble(col) = pixel
+    }
+    val featureVector = new DenseVector(imageInDouble)
+    featureVector
   }
 
   def matToVectors(mat: Mat): Array[Vector] = {
