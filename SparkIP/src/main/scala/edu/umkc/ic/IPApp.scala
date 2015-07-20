@@ -136,7 +136,7 @@ object IPApp {
     println("Naive Bayes Model generated")
   }
 
-  def testImageClassification() = {
+  def testImageClassification(sc: SparkContext) = {
 
     val model = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
     val vocabulary = ImageUtils.vectorsToMat(model.clusterCenters)
@@ -196,7 +196,7 @@ object IPApp {
     generateNaiveBayesModel(sc)
 
 
-    testImageClassification()
+    testImageClassification(sc)
 
     sc.stop()
   }
