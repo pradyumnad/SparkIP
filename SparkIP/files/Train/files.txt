@@ -1,4 +1,0 @@
-files/Train/airplanes/image_0001.jpg
-files/Train/airplanes/image_0002.jpg
-files/Train/ant/image_0001.jpg
-files/Train/ant/image_0002.jpg
