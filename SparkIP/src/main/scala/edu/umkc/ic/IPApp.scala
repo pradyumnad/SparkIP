@@ -131,6 +131,8 @@ object IPApp {
     val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
     val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
 
+    ModelEvaluation.evaluateModel(predictionAndLabel)
+
     // Save and load model
     model.save(sc, IPSettings.NAIVE_BAYES_PATH)
     println("Naive Bayes Model generated")
