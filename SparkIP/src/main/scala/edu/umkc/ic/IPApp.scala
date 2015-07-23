@@ -4,18 +4,21 @@ package edu.umkc.ic
  * Created by pradyumnad on 10/07/15.
  */
 
+import java.io._
+import java.net.{Socket, InetAddress}
 import java.nio.file.{Paths, Files}
+import javax.imageio.ImageIO
 
+import com.sun.jersey.core.util.Base64
 import org.apache.spark.mllib.classification.{NaiveBayesModel, NaiveBayes}
 import org.apache.spark.mllib.clustering.{KMeansModel, KMeans}
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{SparkConf, SparkContext}
-import org.bytedeco.javacpp.opencv_core._
-import org.bytedeco.javacpp.opencv_features2d._
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.bytedeco.javacpp.opencv_highgui._
-import org.bytedeco.javacpp.opencv_nonfree.SURF
+import sun.misc.BASE64Decoder
 
 import scala.collection.mutable
 
@@ -73,7 +76,6 @@ object IPApp {
     clusters.save(sc, IPSettings.KMEANS_PATH)
     println(s"Saves Clusters to ${IPSettings.KMEANS_PATH}")
   }
-
 
   def createHistogram(sc: SparkContext, images: RDD[(String, String)]): Unit = {
     if (Files.exists(Paths.get(IPSettings.HISTOGRAM_PATH))) {
@@ -138,6 +140,11 @@ object IPApp {
     println("Naive Bayes Model generated")
   }
 
+  /**
+   * @note Test method for classification on Spark
+   * @param sc : Spark Context
+   * @return
+   */
   def testImageClassification(sc: SparkContext) = {
 
     val model = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
@@ -163,12 +170,38 @@ object IPApp {
     waitKey(0)
   }
 
+  /**
+   * @note Test method for classification from Client
+   * @param sc : Spark Context
+   * @param path : Path of the image to be classified
+   */
+  def classifyImage(sc: SparkContext, path: String) : Unit = {
+
+    val model = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
+    val vocabulary = ImageUtils.vectorsToMat(model.clusterCenters)
+
+    val desc = ImageUtils.bowDescriptors(path, vocabulary)
+
+    val histogram = ImageUtils.matToVector(desc)
+
+    println("--Histogram size : " + histogram.size)
+
+    val nbModel = NaiveBayesModel.load(sc, IPSettings.NAIVE_BAYES_PATH)
+    println(nbModel.labels.mkString(" "))
+
+    val p = nbModel.predict(histogram)
+    println(s"Predicting test image : " + IMAGE_CATEGORIES(p.toInt))
+
+    IMAGE_CATEGORIES(p.toInt)
+  }
+
   def main(args: Array[String]) {
     val conf = new SparkConf()
       .setAppName(s"IPApp")
       .setMaster("local[*]")
       .set("spark.executor.memory", "2g")
-    val sc = new SparkContext(conf)
+    val ssc = new StreamingContext(conf, Seconds(2))
+    val sc = ssc.sparkContext
 
     val images = sc.wholeTextFiles(s"${IPSettings.INPUT_DIR}/*/*.jpg").cache()
 
@@ -197,10 +230,42 @@ object IPApp {
      */
     generateNaiveBayesModel(sc)
 
+    //    testImageClassification(sc)
 
-    testImageClassification(sc)
+    val ip = InetAddress.getByName("10.182.0.192").getHostName
 
-    sc.stop()
+    //    val lines = ssc.receiverStream(new CustomReceiver(ip,5555))
+    val lines = ssc.socketTextStream(ip, 5555)
+
+    val data = lines.map(line => {
+      line
+    })
+
+    data.print()
+
+    //Filtering out the non base64 strings
+    val base64Strings = lines.filter(line => {
+      Base64.isBase64(line)
+    })
+
+    base64Strings.foreachRDD(rdd => {
+      val base64s = rdd.collect()
+      for (base64 <- base64s) {
+        val bufferedImage = ImageIO.read(new ByteArrayInputStream(new BASE64Decoder().decodeBuffer(base64)))
+        val imgOutFile = new File("newLabel.jpg")
+        val saved = ImageIO.write(bufferedImage, "jpg", imgOutFile)
+        println("Saved : " + saved)
+
+        if (saved) {
+          val category = classifyImage(rdd.context, "newLabel.jpg")
+          println(category)
+        }
+      }
+    })
+
+    ssc.start()
+
+    ssc.awaitTermination()
+    //    ssc.stop()
   }
-
 }
