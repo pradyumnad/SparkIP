@@ -14,3 +14,7 @@ Listed are the steps below to achieve Image Classification
 * Use Naive Bayes to generate Model
 * Choose a test image and generate the Histogram image and predict it using the Naive Bayes model generated above.
 
+###Data Set
+------------
+
+CMU Face Images `https://archive.ics.uci.edu/ml/machine-learning-databases/faces-mld/faces.data.html`
