@@ -17,4 +17,5 @@ Listed are the steps below to achieve Image Classification
 ###Data Set
 ------------
 
-CMU Face Images `https://archive.ics.uci.edu/ml/machine-learning-databases/faces-mld/faces.data.html`
+[CMU Description] (https://archive.ics.uci.edu/ml/machine-learning-databases/faces-mld/faces.data.html)
+[CMU Data Set] (https://archive.ics.uci.edu/ml/machine-learning-databases/faces-mld/)
