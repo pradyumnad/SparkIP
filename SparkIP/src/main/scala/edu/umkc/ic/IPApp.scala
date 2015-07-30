@@ -104,7 +104,7 @@ object IPApp {
 
         val splits = name.split("/")
         val fileName = splits(splits.length - 1)
-        val label = splits(splits.length - 2)
+        val label = fileName.charAt(4)+""+fileName.charAt(5)
 
         println(fileName)
 
@@ -160,7 +160,7 @@ object IPApp {
     val model = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
     val vocabulary = ImageUtils.vectorsToMat(model.clusterCenters)
 
-    val path = "files/Train/smile/0bb555ac-cfd2-49da-a767-7ac539bcd3df.jpg"
+    val path = "/Users/pradyumnad/KDM/Scala/SparkIP/SparkIP/files/KDEF/AF01/AF01AFS.JPG"
     val desc = ImageUtils.bowDescriptors(path, vocabulary)
 
     val testImageMat = imread(path)
@@ -213,13 +213,13 @@ object IPApp {
     val ssc = new StreamingContext(conf, Seconds(2))
     val sc = ssc.sparkContext
 
-    val images = sc.wholeTextFiles(s"${IPSettings.INPUT_DIR}/*/*.jpg").cache()
+    val images = sc.wholeTextFiles(s"${IPSettings.INPUT_DIR}/*/*S.JPG").cache()
 
     val labelsList = images.map {
       case (name, content) => {
         val splits = name.split("/")
         val fileName = splits(splits.length - 1)
-        val label = splits(splits.length - 2)
+        val label = fileName.charAt(4)+""+fileName.charAt(5)
         label
       }
     }

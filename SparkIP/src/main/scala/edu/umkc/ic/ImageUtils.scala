@@ -28,6 +28,24 @@ object ImageUtils {
     }
   }
 
+  def faceMat(file: String): Mat = {
+    val frame_gray: Mat = imread(file, CV_LOAD_IMAGE_GRAYSCALE)
+    if (frame_gray.empty()) {
+      println("Image is empty")
+      -1
+    }
+
+    //Equalises the brightness and contract by normalising the histogram
+    equalizeHist(frame_gray, frame_gray)
+
+    val faces = new Rect()
+
+    faceCascade.detectMultiScale(frame_gray, faces, 1.1, 2, 0, new Size(80, 80), new Size())
+
+    val roiImage = frame_gray(faces)
+    roiImage
+  }
+
   def faceDetect(file: String): Mat = {
     println(file)
     val frame_gray: Mat = imread(file, CV_LOAD_IMAGE_GRAYSCALE)
@@ -98,12 +116,15 @@ object ImageUtils {
     bowDE.setVocabulary(dictionary)
     println(bowDE.descriptorSize() + " " + bowDE.descriptorType())
 
+//    val img = faceMat(file)
     val img = imread(file, CV_LOAD_IMAGE_GRAYSCALE)
     if (img.empty()) {
       println("Image is empty")
       -1
     }
-
+//AN DI SA AF NE SU HA
+    //5.0 2.0 6.0 0.0 3.0 1.0 4.0
+    //Surprised  Sad  Happy  Angry  Afraid  Disgusted  Neutral
     val keypoints = new KeyPoint
 
     detector.detect(img, keypoints)
