@@ -7,12 +7,13 @@ import org.apache.spark.rdd.RDD
  * Created by Mayanka on 14-Jul-15.
  */
 object ModelEvaluation {
-  def evaluateModel(predictionAndLabels: RDD[(Double, Double)]) = {
+  def evaluateModel(predictionAndLabels: RDD[(Double, Double)]) : MulticlassMetrics = {
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val cfMatrix = metrics.confusionMatrix
+
     println(" |=================== Confusion matrix ==========================")
     println(cfMatrix)
-
+    metrics
 //
 //    printf(
 //      s"""

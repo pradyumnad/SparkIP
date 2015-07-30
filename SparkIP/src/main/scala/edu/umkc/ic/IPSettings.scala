@@ -5,10 +5,11 @@ package edu.umkc.ic
  */
 object IPSettings {
 
-  val INPUT_DIR = "files/faces"
+  val INPUT_DIR = "files/Train"
 
   val FEATURES_PATH = "models/features"
   val KMEANS_PATH = "models/clusters"
   val HISTOGRAM_PATH = "models/histograms"
   val NAIVE_BAYES_PATH = "models/nbmodel"
+  val CF_MATRIX_PATH = "models/cfmatrix"
 }

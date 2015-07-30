@@ -17,6 +17,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.bytedeco.javacpp.opencv_core.Mat
 import org.bytedeco.javacpp.opencv_highgui._
 import sun.misc.BASE64Decoder
 
@@ -25,7 +26,7 @@ import scala.collection.mutable
 object IPApp {
   val featureVectorsCluster = new mutable.MutableList[String]
 
-  val IMAGE_CATEGORIES = List("accordion", "airplanes", "ant")
+  var IMAGE_CATEGORIES = List[String]()
 
   /**
    *
@@ -39,9 +40,12 @@ object IPApp {
       return
     }
 
+    ImageUtils.init
+
     val data = images.map {
       case (name, contents) => {
-        val desc = ImageUtils.descriptors(name.split(":")(1))
+        val desc:Mat=ImageUtils.faceDetect(name.split(":")(1))
+       // val desc = ImageUtils.descriptors(name.split(":")(1))
         val list = ImageUtils.matToString(desc)
         println("-- " + list.size)
         list
@@ -65,7 +69,7 @@ object IPApp {
     val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble))).cache()
 
     // Cluster the data into two classes using KMeans
-    val numClusters = 400
+    val numClusters = 200
     val numIterations = 20
     val clusters = KMeans.train(parsedData, numClusters, numIterations)
 
@@ -88,7 +92,7 @@ object IPApp {
     val kMeansCenters = sc.broadcast(sameModel.clusterCenters)
 
     val categories = sc.broadcast(IMAGE_CATEGORIES)
-
+    println("Broadcasting "+IMAGE_CATEGORIES.mkString(" "))
 
     val data = images.map {
       case (name, contents) => {
@@ -97,11 +101,14 @@ object IPApp {
 
         val desc = ImageUtils.bowDescriptors(name.split(":")(1), vocabulary)
         val list = ImageUtils.matToString(desc)
-        println("-- " + list.size)
 
-        val segments = name.split("/")
-        val cat = segments(segments.length - 2)
-        List(categories.value.indexOf(cat) + "," + list(0))
+        val splits = name.split("/")
+        val fileName = splits(splits.length - 1)
+        val label = splits(splits.length - 2)
+
+        println(fileName)
+
+        List(categories.value.indexOf(label) + "," + list.head)
       }
     }.reduce((x, y) => x ::: y)
 
@@ -133,8 +140,11 @@ object IPApp {
     val predictionAndLabel = test.map(p => (model.predict(p.features), p.label))
     val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
 
-    ModelEvaluation.evaluateModel(predictionAndLabel)
+    val cfMatrix = ModelEvaluation.evaluateModel(predictionAndLabel)
+    val matrixRDD = sc.parallelize(cfMatrix.confusionMatrix.toString())
+    matrixRDD.saveAsTextFile(IPSettings.CF_MATRIX_PATH)
 
+    println(model.labels.mkString(" "))
     // Save and load model
     model.save(sc, IPSettings.NAIVE_BAYES_PATH)
     println("Naive Bayes Model generated")
@@ -150,7 +160,7 @@ object IPApp {
     val model = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
     val vocabulary = ImageUtils.vectorsToMat(model.clusterCenters)
 
-    val path = "files/101_ObjectCategories/ant/image_0012.jpg"
+    val path = "files/Train/smile/0bb555ac-cfd2-49da-a767-7ac539bcd3df.jpg"
     val desc = ImageUtils.bowDescriptors(path, vocabulary)
 
     val testImageMat = imread(path)
@@ -175,7 +185,7 @@ object IPApp {
    * @param sc : Spark Context
    * @param path : Path of the image to be classified
    */
-  def classifyImage(sc: SparkContext, path: String) : Unit = {
+  def classifyImage(sc: SparkContext, path: String): Unit = {
 
     val model = KMeansModel.load(sc, IPSettings.KMEANS_PATH)
     val vocabulary = ImageUtils.vectorsToMat(model.clusterCenters)
@@ -199,11 +209,26 @@ object IPApp {
     val conf = new SparkConf()
       .setAppName(s"IPApp")
       .setMaster("local[*]")
-      .set("spark.executor.memory", "2g")
+      .set("spark.executor.memory", "4g")
     val ssc = new StreamingContext(conf, Seconds(2))
     val sc = ssc.sparkContext
 
     val images = sc.wholeTextFiles(s"${IPSettings.INPUT_DIR}/*/*.jpg").cache()
+
+    val labelsList = images.map {
+      case (name, content) => {
+        val splits = name.split("/")
+        val fileName = splits(splits.length - 1)
+        val label = splits(splits.length - 2)
+        label
+      }
+    }
+
+    val labels = labelsList.countByValue().keys.toArray
+
+    IMAGE_CATEGORIES = labels.toList
+
+    println(IMAGE_CATEGORIES.mkString(" "))
 
     /**
      * Extracts Key Descriptors from the Training set
@@ -230,7 +255,9 @@ object IPApp {
      */
     generateNaiveBayesModel(sc)
 
-    //    testImageClassification(sc)
+
+    testImageClassification(sc)
+
 
     val ip = InetAddress.getByName("10.182.0.192").getHostName
 

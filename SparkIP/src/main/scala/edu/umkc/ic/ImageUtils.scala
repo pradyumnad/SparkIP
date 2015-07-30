@@ -4,6 +4,8 @@ import org.apache.spark.mllib.linalg.{DenseVector, Matrices, Matrix, Vector}
 import org.bytedeco.javacpp.opencv_core._
 import org.bytedeco.javacpp.opencv_features2d.{BOWImgDescriptorExtractor, DescriptorExtractor, FlannBasedMatcher, KeyPoint}
 import org.bytedeco.javacpp.opencv_highgui._
+import org.bytedeco.javacpp.opencv_imgproc._
+import org.bytedeco.javacpp.opencv_objdetect._
 import org.bytedeco.javacpp.opencv_nonfree.{SIFT, SURF}
 
 import scala.collection.mutable
@@ -14,6 +16,59 @@ import scala.collection.mutable.ArrayBuffer
  */
 object ImageUtils {
 
+  val faceCascade: CascadeClassifier = new CascadeClassifier
+  val haar_face_cascade_name = "files/haarcascade_frontalface_default.xml"
+  val face_cascade_name = "files/lbpcascade_frontalface.xml"
+
+  def init: Unit = {
+    if (!faceCascade.load(face_cascade_name)) {
+      println("--(!)Error loading face cascade")
+    } else {
+      println("Loaded face classifier")
+    }
+  }
+
+  def faceDetect(file: String): Mat = {
+    println(file)
+    val frame_gray: Mat = imread(file, CV_LOAD_IMAGE_GRAYSCALE)
+    if (frame_gray.empty()) {
+      println("Image is empty")
+      -1
+    }
+
+    //Equalises the brightness and contract by normalising the histogram
+    equalizeHist(frame_gray, frame_gray)
+
+    val faces = new Rect()
+
+    faceCascade.detectMultiScale(frame_gray, faces, 1.1, 2, 0, new Size(80, 80), new Size())
+
+    //    println(faces.size().asCvSize().toString)
+    //    println("Capacity : " + faces.capacity())
+    //    println(faces.asCvRect().toString)
+
+    //     = frame_gray.adjustROI(faces.x(), faces.y(), faces.width(), faces.height())
+    val roiImage = frame_gray(faces)
+    // imshow("ROI", roiImage)
+    println(roiImage.size().asCvSize().toString)
+
+    val detector = new SIFT
+    val keypoints_1 = new KeyPoint
+
+    val mask = new Mat
+    val descriptors = new Mat
+    if (!roiImage.empty()) {
+      detector.detectAndCompute(roiImage, mask, keypoints_1, descriptors)
+
+      //    println(s"No of Keypoints ${keypoints_1.size()}")
+      println(s"Key Descriptors ${descriptors.rows()} x ${descriptors.cols()}")
+      descriptors
+    }
+    else {
+      new Mat()
+    }
+  }
+
   def descriptors(file: String): Mat = {
     val img_1 = imread(file, CV_LOAD_IMAGE_GRAYSCALE)
     if (img_1.empty()) {
@@ -22,7 +77,7 @@ object ImageUtils {
     }
 
     //-- Step 1: Detect the keypoints using ORB
-    val detector = new SIFT()
+    val detector = new SIFT(100)
     val keypoints_1 = new KeyPoint
 
     val mask = new Mat
@@ -56,8 +111,8 @@ object ImageUtils {
     val response_histogram = new Mat
     bowDE.compute(img, keypoints, response_histogram)
 
-    println("Histogram size : " + response_histogram.size().asCvSize().toString)
-    println("Histogram : " + response_histogram.asCvMat().toString)
+    //    println("Histogram size : " + response_histogram.size().asCvSize().toString)
+    //    println("Histogram : " + response_histogram.asCvMat().toString)
     response_histogram
   }
 
