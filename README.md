@@ -1,7 +1,5 @@
 # SparkIP
 
-This project is about creating a Image classification workflow in `Apache Spark`, `JavaCV` (OpenCV).
-
 ###Workflow
 ___________
 Listed are the steps below to achieve Image Classification
